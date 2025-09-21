@@ -3,6 +3,7 @@ const patientRepository = require('../repositories/PatientRepository');
 const appointmentRepository = require('../repositories/AppointmentRepository');
 const medicalServiceRepository = require('../repositories/MedicalServiceRepository');
 const Reminder = require('../models/Reminder');
+const { pool } = require('../config/database');
 
 class ReminderService {
   async getAllReminders() {
@@ -124,6 +125,26 @@ class ReminderService {
       console.error('Service error creating reminder for accepted appointment:', error);
       throw error;
     }
+  }
+
+  async createReminder({ patientId, appointmentId = null, serviceName = null, preferredDateTime = null, message }) {
+    if (!patientId || !message) throw new Error('patientId and message are required');
+
+    let dt = null;
+    if (preferredDateTime) {
+      const d = new Date(preferredDateTime);
+      if (isNaN(d)) throw new Error('Invalid preferredDateTime');
+      dt = d.toISOString().slice(0, 19).replace('T', ' ');
+    }
+
+    const [result] = await pool.execute(
+      `INSERT INTO Reminders (patientId, appointmentId, serviceName, preferredDateTime, message, isRead, createdAt, updatedAt)
+       VALUES (?, ?, ?, ?, ?, FALSE, NOW(), NOW())`,
+      [patientId, appointmentId, serviceName, dt, message]
+    );
+
+    const [rows] = await pool.execute('SELECT * FROM Reminders WHERE reminderId = ?', [result.insertId]);
+    return rows[0];
   }
 
   async markAsRead(reminderId) {

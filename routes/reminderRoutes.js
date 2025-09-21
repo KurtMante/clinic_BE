@@ -6,6 +6,9 @@ const router = express.Router();
 // GET all reminders
 router.get('/', reminderController.getAllReminders);
 
+// POST create reminder
+router.post('/', reminderController.createReminder);
+
 // GET reminders by patient ID
 router.get('/patient/:patientId', reminderController.getRemindersByPatientId);
 

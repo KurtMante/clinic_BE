@@ -63,6 +63,36 @@ class ReminderController {
       res.status(404).json({ error: error.message });
     }
   }
+
+  async createReminder(req, res) {
+    try {
+      const {
+        patientId,
+        appointmentId = null,
+        serviceName = null,
+        preferredDateTime = null,
+        message,
+        reminderType = 'Appointment' 
+      } = req.body;
+
+      if (!patientId || !message) {
+        return res.status(400).json({ error: 'patientId and message are required' });
+      }
+
+      const reminder = await reminderService.createReminder({
+        patientId,
+        appointmentId,
+        serviceName,
+        preferredDateTime,
+        message,
+        reminderType
+      });
+
+      res.status(201).json(reminder);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
 }
 
 module.exports = new ReminderController();
