@@ -141,6 +141,14 @@ class PatientRepository {
       throw error;
     }
   }
+
+  async updatePassword(email, newPassword) {
+    // WARNING: In production, hash the password before saving!
+    await pool.execute(
+      'UPDATE patients SET password = ? WHERE email = ?',
+      [newPassword, email]
+    );
+  }
 }
 
 module.exports = new PatientRepository();

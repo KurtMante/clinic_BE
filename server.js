@@ -38,8 +38,7 @@ const feedbackRoutes = require('./routes/feedbackRoutes');
 const staffRoutes = require('./routes/staffRoutes');
 const reminderRoutes = require('./routes/reminderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
-const authRoutes = require('./routes/authRoutes');
-import passwordRoutes from './routes/passwordRoutes.js';
+const resetPasswordRoutes = require('./routes/resetPasswordRoutes');
 
 app.use('/api/patients', patientRoutes);
 app.use('/api/medical-services', medicalServiceRoutes);
@@ -49,8 +48,8 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/admins', adminRoutes);
-app.use('/api/auth', authRoutes);
-app.use('/api', passwordRoutes);
+app.use('/api/patients', resetPasswordRoutes);
+
 
 // Health check route
 app.get('/', (req, res) => {
