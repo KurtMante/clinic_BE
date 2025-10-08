@@ -1,5 +1,6 @@
 const staffRepository = require('../repositories/StaffRepository');
 const Staff = require('../models/Staff');
+const { sendEmail } = require('./EmailService'); // added
 
 class StaffService {
   async getAllStaff() {
@@ -48,7 +49,16 @@ class StaffService {
       throw new Error(`Validation failed: ${validationErrors.join(', ')}`);
     }
 
-    return await staffRepository.save(staffData);
+    const saved = await staffRepository.save(staffData);
+    if (saved?.email) {
+      sendEmail({
+        toEmail: saved.email,
+        subject: 'Welcome to Clinic System',
+        text: `Hi ${saved.firstName || ''}, your staff account has been created.`,
+        html: `<p>Hi ${saved.firstName || ''},<br>Your staff account has been created.</p>`
+      });
+    }
+    return saved;
   }
 
   async loginStaff(email, password) {
@@ -86,6 +96,14 @@ class StaffService {
     
     // Remove password from response
     const { password: _, ...staffWithoutPassword } = updatedStaff;
+    if (staffWithoutPassword.email) {
+      sendEmail({
+        toEmail: staffWithoutPassword.email,
+        subject: 'Password Changed',
+        text: 'Your password was changed successfully.',
+        html: '<p>Your password was changed successfully.</p>'
+      });
+    }
     return staffWithoutPassword;
   }
 

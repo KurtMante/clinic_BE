@@ -4,7 +4,7 @@ const appointmentRepository = require('../repositories/AppointmentRepository');
 const medicalServiceRepository = require('../repositories/MedicalServiceRepository');
 const Reminder = require('../models/Reminder');
 const { pool } = require('../config/database');
-const { sendSms } = require('./SmsService');
+const { sendEmail } = require('./EmailService');
 
 class ReminderService {
   async getAllReminders() {
@@ -30,29 +30,13 @@ class ReminderService {
   }
 
   async getRemindersByPatientId(patientId) {
-    try {
-      const patient = await patientRepository.findById(patientId);
-      if (!patient) {
-        throw new Error(`Patient with ID ${patientId} not found`);
-      }
-      return await reminderRepository.findByPatientId(patientId);
-    } catch (error) {
-      console.error('Service error getting reminders by patient ID:', error);
-      throw error;
-    }
+    if (!patientId) throw new Error('patientId required');
+    return reminderRepository.findByPatientId(patientId);
   }
 
   async getUnreadRemindersByPatientId(patientId) {
-    try {
-      const patient = await patientRepository.findById(patientId);
-      if (!patient) {
-        throw new Error(`Patient with ID ${patientId} not found`);
-      }
-      return await reminderRepository.findUnreadByPatientId(patientId);
-    } catch (error) {
-      console.error('Service error getting unread reminders by patient ID:', error);
-      throw error;
-    }
+    if (!patientId) throw new Error('patientId required');
+    return reminderRepository.findUnreadByPatientId(patientId);
   }
 
   async createReminderForAcceptedAppointment(appointmentId) {
@@ -128,91 +112,97 @@ class ReminderService {
     }
   }
 
-  async createReminder({ patientId, appointmentId, serviceName, preferredDateTime, message }) {
-    if (!patientId || !appointmentId || !serviceName || !preferredDateTime || !message) {
-      throw new Error('Missing required reminder fields');
+  async createReminder({ patientId, appointmentId = null, serviceName = null, preferredDateTime = null, message }) {
+    try {
+      const missing = [];
+      if (!patientId) missing.push('patientId');
+      if (!message) missing.push('message');
+      // If you REALLY want to require appointment-based reminders, uncomment:
+      // if (!appointmentId) missing.push('appointmentId');
+      if (missing.length) {
+        throw new Error('Missing required field(s): ' + missing.join(', '));
+      }
+
+      // Fetch patient (single query) for validation + email
+      const patient = await patientRepository.findById(patientId);
+      if (!patient) throw new Error(`Patient ${patientId} not found`);
+
+      // Normalize & validate datetime if provided
+      let dt = null;
+      if (preferredDateTime) {
+        if (preferredDateTime.includes('T')) {
+          const d = new Date(preferredDateTime);
+            if (isNaN(d)) throw new Error('Invalid preferredDateTime');
+          dt = d.toISOString().slice(0, 19).replace('T', ' ');
+        } else {
+          // Basic format check YYYY-MM-DD HH:mm:ss
+          if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(preferredDateTime)) {
+            throw new Error('preferredDateTime must be YYYY-MM-DD HH:mm:ss');
+          }
+          dt = preferredDateTime;
+        }
+      }
+
+      const reminder = await reminderRepository.save({
+        patientId,
+        appointmentId,
+        serviceName,
+        preferredDateTime: dt,
+        message,
+        isRead: 0
+      });
+
+      // Send email (if patient has email)
+      if (patient.email) {
+        const subjectParts = ['Reminder'];
+        if (serviceName) subjectParts.push(serviceName);
+        if (dt) subjectParts.push('(' + dt + ')');
+        const subject = subjectParts.join(' ');
+
+        const html = `
+          <h3>Reminder</h3>
+          <p>${message}</p>
+          ${serviceName ? `<p><strong>Service:</strong> ${serviceName}</p>` : ''}
+          ${dt ? `<p><strong>Date/Time:</strong> ${dt}</p>` : ''}
+        `;
+
+        sendEmail({
+          toEmail: patient.email,
+          toName: patient.firstName || '',
+          subject,
+          text: message,
+          html
+        });
+      } else {
+        console.warn(`Reminder email skipped: patient ${patientId} has no email`);
+      }
+
+      return reminder;
+    } catch (err) {
+      console.error('createReminder error:', err.message);
+      throw err;
     }
-
-    // Ensure patient exists & get phone
-    const [pRows] = await pool.execute(
-      'SELECT firstName, phone FROM patients WHERE patientId = ?',
-      [patientId]
-    );
-    if (!pRows.length) throw new Error('Invalid patientId');
-    const patient = pRows[0];
-
-    // Normalize datetime (expects 'YYYY-MM-DD HH:mm:ss' already; convert if needed)
-    let dt = preferredDateTime;
-    if (preferredDateTime.includes('T')) {
-      dt = new Date(preferredDateTime).toISOString().slice(0, 19).replace('T', ' ');
-    }
-
-    const reminder = await reminderRepository.save({
-      patientId,
-      appointmentId,
-      serviceName,
-      preferredDateTime: dt,
-      message,
-      isRead: 0
-    });
-
-    // Send SMS (fire-and-forget)
-    if (patient.phone) {
-      const smsBody = `Reminder: ${serviceName} on ${dt}. ${message}`;
-      sendSms(patient.phone, smsBody);
-      // Optional: mark smsSent
-      try {
-        await pool.execute('UPDATE reminders SET smsSent = 1 WHERE reminderId = ?', [reminder.reminderId]);
-        reminder.smsSent = 1;
-      } catch {}
-    }
-
-    return reminder;
   }
 
   async markAsRead(reminderId) {
-    const existing = await reminderRepository.findById(reminderId);
-    if (!existing) throw new Error('Reminder not found');
-    if (existing.isRead) return existing;
-
-    const updated = await reminderRepository.update(reminderId, { isRead: 1 });
-
-    // Optional SMS on read
-    // const [p] = await pool.execute('SELECT phone FROM patients WHERE patientId = ?', [updated.patientId]);
-    // if (p.length && p[0].phone) {
-    //   sendSms(p[0].phone, `You viewed your reminder: ${updated.serviceName}`);
-    // }
-
-    return updated;
+    const reminder = await reminderRepository.findById(reminderId);
+    if (!reminder) throw new Error('Reminder not found');
+    if (reminder.isRead) return reminder;
+    return reminderRepository.update(reminderId, { isRead: 1 });
   }
 
   async markAsUnread(reminderId) {
-    try {
-      const reminder = await this.getReminderById(reminderId);
-      
-      if (reminder.isRead === 0) {
-        throw new Error('This reminder is already marked as unread');
-      }
-
-      return await reminderRepository.update(reminderId, { isRead: false });
-    } catch (error) {
-      console.error('Service error marking reminder as unread:', error);
-      throw error;
-    }
+    const reminder = await reminderRepository.findById(reminderId);
+    if (!reminder) throw new Error('Reminder not found');
+    if (!reminder.isRead) return reminder;
+    return reminderRepository.update(reminderId, { isRead: 0 });
   }
 
   async deleteReminder(reminderId) {
-    try {
-      await this.getReminderById(reminderId);
-      const success = await reminderRepository.deleteById(reminderId);
-      if (!success) {
-        throw new Error('Failed to delete reminder');
-      }
-      return { message: 'Reminder deleted successfully' };
-    } catch (error) {
-      console.error('Service error deleting reminder:', error);
-      throw error;
-    }
+    const existing = await reminderRepository.findById(reminderId);
+    if (!existing) throw new Error('Reminder not found');
+    await reminderRepository.delete(reminderId);
+    return { message: 'Reminder deleted' };
   }
 }
 

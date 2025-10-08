@@ -104,44 +104,21 @@ class ReminderRepository {
     }
   }
 
-  async update(reminderId, reminderData) {
-    try {
-      const fields = [];
-      const values = [];
-      
-      if (reminderData.message !== undefined) {
-        fields.push('message = ?');
-        values.push(reminderData.message);
-      }
-      
-      if (reminderData.isRead !== undefined) {
-        fields.push('isRead = ?');
-        values.push(reminderData.isRead ? 1 : 0);
-      }
-      
-      if (fields.length === 0) return null;
-      
-      fields.push('updatedAt = NOW()');
-      values.push(reminderId);
-      
-      const query = `UPDATE reminders SET ${fields.join(', ')} WHERE reminderId = ?`;
-      await pool.execute(query, values);
-      
-      return this.findById(reminderId);
-    } catch (error) {
-      console.error('Error updating reminder:', error);
-      throw error;
-    }
+  async update(reminderId, fields) {
+    const keys = Object.keys(fields);
+    if (!keys.length) return this.findById(reminderId);
+    const set = keys.map(k => `${k} = ?`).join(', ');
+    const values = keys.map(k => fields[k]);
+    await pool.execute(
+      `UPDATE reminders SET ${set}, updatedAt = NOW() WHERE reminderId = ?`,
+      [...values, reminderId]
+    );
+    return this.findById(reminderId);
   }
 
-  async deleteById(reminderId) {
-    try {
-      const [result] = await pool.execute('DELETE FROM reminders WHERE reminderId = ?', [reminderId]);
-      return result.affectedRows > 0;
-    } catch (error) {
-      console.error('Error deleting reminder:', error);
-      throw error;
-    }
+  async delete(reminderId) {
+    await pool.execute('DELETE FROM reminders WHERE reminderId = ?', [reminderId]);
+    return true;
   }
 
   async createTable() {

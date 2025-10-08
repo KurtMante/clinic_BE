@@ -3,37 +3,48 @@ const reminderService = require('../services/ReminderService');
 class ReminderController {
   async getAllReminders(req, res) {
     try {
-      const reminders = await reminderService.getAllReminders();
-      res.status(200).json(reminders);
-    } catch (error) {
-      res.status(500).json({ error: error.message });
+      const data = await reminderService.getAllReminders();
+      res.json(data);
+    } catch (e) {
+      res.status(500).json({ error: e.message });
     }
   }
 
   async getReminderById(req, res) {
     try {
       const reminder = await reminderService.getReminderById(req.params.reminderId);
-      res.status(200).json(reminder);
-    } catch (error) {
-      res.status(404).json({ error: error.message });
+      res.json(reminder);
+    } catch (e) {
+      res.status(404).json({ error: e.message });
     }
   }
 
   async getRemindersByPatientId(req, res) {
     try {
-      const reminders = await reminderService.getRemindersByPatientId(req.params.patientId);
-      res.status(200).json(reminders);
-    } catch (error) {
-      res.status(404).json({ error: error.message });
+      const { patientId } = req.params;
+      const data = await reminderService.getRemindersByPatientId(patientId);
+      res.json(data);
+    } catch (e) {
+      res.status(400).json({ error: e.message });
     }
   }
 
   async getUnreadRemindersByPatientId(req, res) {
     try {
-      const reminders = await reminderService.getUnreadRemindersByPatientId(req.params.patientId);
-      res.status(200).json(reminders);
-    } catch (error) {
-      res.status(404).json({ error: error.message });
+      const { patientId } = req.params;
+      const data = await reminderService.getUnreadRemindersByPatientId(patientId);
+      res.json(data);
+    } catch (e) {
+      res.status(400).json({ error: e.message });
+    }
+  }
+
+  async createReminder(req, res) {
+    try {
+      const reminder = await reminderService.createReminder(req.body);
+      res.status(201).json(reminder);
+    } catch (e) {
+      res.status(400).json({ error: e.message });
     }
   }
 
@@ -48,28 +59,19 @@ class ReminderController {
 
   async markAsUnread(req, res) {
     try {
-      const reminder = await reminderService.markAsUnread(req.params.reminderId);
-      res.status(200).json(reminder);
-    } catch (error) {
-      res.status(400).json({ error: error.message });
+      const updated = await reminderService.markAsUnread(req.params.reminderId);
+      res.json(updated);
+    } catch (e) {
+      res.status(404).json({ error: e.message });
     }
   }
 
   async deleteReminder(req, res) {
     try {
       const result = await reminderService.deleteReminder(req.params.reminderId);
-      res.status(200).json(result);
-    } catch (error) {
-      res.status(404).json({ error: error.message });
-    }
-  }
-
-  async createReminder(req, res) {
-    try {
-      const reminder = await reminderService.createReminder(req.body);
-      res.status(201).json(reminder);
+      res.json(result);
     } catch (e) {
-      res.status(400).json({ error: e.message });
+      res.status(404).json({ error: e.message });
     }
   }
 }

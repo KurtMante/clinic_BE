@@ -2,7 +2,8 @@ const acceptedAppointmentRepository = require('../repositories/AcceptedAppointme
 const appointmentRepository = require('../repositories/AppointmentRepository');
 const patientRepository = require('../repositories/PatientRepository');
 const medicalServiceRepository = require('../repositories/MedicalServiceRepository');
-const { sendSms } = require('./SmsService');
+// Removed: const { sendSms } = require('./SmsService');
+const { sendEmail } = require('./EmailService');
 const AcceptedAppointment = require('../models/AcceptedAppointment');
 const reminderService = require('./ReminderService');
 
@@ -56,6 +57,32 @@ class AcceptedAppointmentService {
     }
   }
 
+  // Helper to safely send acceptance email
+  async _sendAcceptanceEmail(appointment, service, patient) {
+    if (!patient?.email) return;
+    const dateStr = new Date(appointment.preferredDateTime)
+      .toISOString()
+      .replace('T', ' ')
+      .slice(0, 16);
+    const svcName = service?.serviceName || 'the requested service';
+    const subject = `Appointment Accepted (#${appointment.appointmentId})`;
+    const text = `Your appointment for ${svcName} on ${dateStr} has been accepted.`;
+    const html = `
+      <h3>Appointment Accepted</h3>
+      <p>Dear ${patient.firstName || 'Patient'},</p>
+      <p>Your appointment (<strong>${appointment.appointmentId}</strong>) for <strong>${svcName}</strong> on <strong>${dateStr}</strong> has been accepted.</p>
+      <p>Symptom/Reason: ${appointment.symptom || 'N/A'}</p>
+      <p>Thank you.</p>
+    `;
+    sendEmail({
+      toEmail: patient.email,
+      toName: patient.firstName || '',
+      subject,
+      text,
+      html
+    });
+  }
+
   async createAcceptedAppointment(appointmentId) {
     try {
       // Get the original appointment
@@ -85,6 +112,22 @@ class AcceptedAppointmentService {
 
       // Save to accepted appointments table
       const savedAcceptedAppointment = await acceptedAppointmentRepository.save(acceptedAppointmentData);
+
+      // Fetch supporting data for email
+      try {
+        const appointmentFull = originalAppointment;
+        const service = appointmentFull.serviceId
+          ? (medicalServiceRepository.findById
+              ? await medicalServiceRepository.findById(appointmentFull.serviceId)
+              : null)
+          : null;
+        const patient = await (patientRepository.findById
+          ? patientRepository.findById(appointmentFull.patientId)
+          : patientRepository.getPatientById(appointmentFull.patientId));
+        await this._sendAcceptanceEmail(appointmentFull, service, patient);
+      } catch (emailErr) {
+        console.warn('Acceptance email skipped (create path):', emailErr.message);
+      }
 
       // Create reminder for the accepted appointment
       try {
@@ -188,17 +231,11 @@ class AcceptedAppointmentService {
       ? await patientRepository.findById(appointment.patientId)
       : await patientRepository.getPatientById(appointment.patientId);
 
-    // 6. Send SMS (non-blocking)
-    if (patient && patient.phone) {
-      const dateStr = new Date(appointment.preferredDateTime)
-        .toISOString()
-        .replace('T', ' ')
-        .slice(0, 16);
-      const svcName = service?.serviceName || 'your service';
-      const msg = `Your appointment (${appointment.appointmentId}) for ${svcName} on ${dateStr} has been accepted.`;
-      sendSms(patient.phone, msg).catch(e =>
-        console.warn('Failed to send accept SMS:', e.message)
-      );
+    // (Remove old inline email code and replace with helper)
+    try {
+      await this._sendAcceptanceEmail(appointment, service, patient);
+    } catch (e) {
+      console.warn('Acceptance email skipped (accept path):', e.message);
     }
 
     return accepted;
@@ -210,21 +247,29 @@ class AcceptedAppointmentService {
       isAttended ? 1 : 0
     );
 
-    // Notify patient (optional)
     try {
-      const patient = await patientRepository.findById
-        ? await patientRepository.findById(updated.patientId)
-        : await patientRepository.getPatientById(updated.patientId);
-      if (patient?.phone) {
-        const msg = isAttended
-          ? `Thank you for attending appointment ${updated.appointmentId}.`
-          : `You were marked absent for appointment ${updated.appointmentId}. Contact us to reschedule.`;
-        sendSms(patient.phone, msg).catch(e =>
-          console.warn('Failed to send attendance SMS:', e.message)
-        );
+      const patient = await (patientRepository.findById
+        ? patientRepository.findById(updated.patientId)
+        : patientRepository.getPatientById(updated.patientId));
+
+      if (patient?.email) {
+        const subject = isAttended
+          ? `Attendance Confirmed (Appointment #${updated.appointmentId})`
+          : `Marked Absent (Appointment #${updated.appointmentId})`;
+        const text = isAttended
+          ? `Thank you for attending appointment #${updated.appointmentId}.`
+          : `You were marked absent for appointment #${updated.appointmentId}. Contact us to reschedule.`;
+        const html = `<p>${text}</p>`;
+        sendEmail({
+          toEmail: patient.email,
+          toName: patient.firstName || '',
+          subject,
+          text,
+          html
+        });
       }
     } catch (e) {
-      console.warn('Attendance SMS skipped:', e.message);
+      console.warn('Attendance email skipped:', e.message);
     }
 
     return updated;

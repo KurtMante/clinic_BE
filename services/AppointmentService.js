@@ -2,7 +2,7 @@ const appointmentRepository = require('../repositories/AppointmentRepository');
 const patientRepository = require('../repositories/PatientRepository');
 const medicalServiceRepository = require('../repositories/MedicalServiceRepository');
 const Appointment = require('../models/Appointment');
-const { sendSms } = require('./SmsService');
+const { sendEmail } = require('./EmailService'); // email only now
 
 class AppointmentService {
   async getAllAppointments() {
@@ -148,25 +148,31 @@ class AppointmentService {
 
       // Save to database
       const savedAppointment = await appointmentRepository.save({
-        patientId: appointment.patientId,
-        serviceId: appointment.serviceId,
-        preferredDateTime: appointment.preferredDateTime,
-        symptom: appointment.symptom,
-        status: appointment.status
+        patientId: appointmentData.patientId,
+        serviceId: appointmentData.serviceId,
+        preferredDateTime: appointmentData.preferredDateTime,
+        symptom: appointmentData.symptom.trim(),
+        status: appointmentData.status || 'Pending'
       });
 
-      // Fetch patient (adjust method name if different)
+      // Fetch patient for email notification
       try {
-        const patient = await patientRepository.findById
-          ? await patientRepository.findById(savedAppointment.patientId)
-          : (await patientRepository.getPatientById(savedAppointment.patientId));
-
-        const phone = patient?.phone;
-        const dt = savedAppointment.preferredDateTime;
-        const msg = `Appointment booked (ID: ${savedAppointment.appointmentId}) on ${dt} for service ${savedAppointment.serviceId}.`;
-        sendSms(phone, msg).catch(e => console.warn('SMS send failed:', e.message));
+        const patient = await patientRepository.findById(savedAppointment.patientId);
+        if (patient?.email) {
+          const subject = `Appointment Created (ID: ${savedAppointment.appointmentId})`;
+            const text = `Your appointment is pending on ${savedAppointment.preferredDateTime}.`;
+          const html = `
+            <h3>Appointment Created</h3>
+            <p>Hi ${patient.firstName || 'Patient'},</p>
+            <p>Your appointment (ID <strong>${savedAppointment.appointmentId}</strong>) has been created with status <strong>${savedAppointment.status}</strong>.</p>
+            <p><strong>Date/Time:</strong> ${savedAppointment.preferredDateTime}</p>
+            <p><strong>Reason:</strong> ${savedAppointment.symptom}</p>
+            <p>We will notify you when it is accepted.</p>
+          `;
+          sendEmail({ toEmail: patient.email, toName: patient.firstName || '', subject, text, html });
+        }
       } catch (e) {
-        console.warn('SMS skipped (patient lookup failed):', e.message);
+        console.warn('Create appointment email skipped:', e.message);
       }
 
       return savedAppointment;
@@ -259,20 +265,28 @@ class AppointmentService {
 
       const updatedAppointment = await appointmentRepository.update(appointmentId, appointmentData);
 
-      // Optional: notify if status or datetime changed
+      // Email notification on status or datetime change
       try {
         if (appointmentData.status || appointmentData.preferredDateTime) {
-          const patient = await patientRepository.findById
-            ? await patientRepository.findById(updatedAppointment.patientId)
-            : (await patientRepository.getPatientById(updatedAppointment.patientId));
-          const phone = patient?.phone;
-          const msg = `Appointment ${appointmentId} updated: `
-            + (appointmentData.status ? `status=${appointmentData.status} ` : '')
-            + (appointmentData.preferredDateTime ? `date=${appointmentData.preferredDateTime}` : '');
-          sendSms(phone, msg.trim()).catch(e => console.warn('SMS send failed:', e.message));
+          const patient = await patientRepository.findById(updatedAppointment.patientId);
+          if (patient?.email) {
+            const subject = `Appointment Updated (ID: ${appointmentId})`;
+            const changes = [];
+            if (appointmentData.status) changes.push(`Status: ${appointmentData.status}`);
+            if (appointmentData.preferredDateTime) changes.push(`Date/Time: ${appointmentData.preferredDateTime}`);
+            const changeLine = changes.join(' | ');
+            const text = `Your appointment ${appointmentId} was updated. ${changeLine}`;
+            const html = `
+              <h3>Appointment Updated</h3>
+              <p>Hi ${patient.firstName || 'Patient'},</p>
+              <p>Your appointment (ID <strong>${appointmentId}</strong>) has been updated.</p>
+              <p>${changes.map(c => `<div>${c}</div>`).join('')}</p>
+            `;
+            sendEmail({ toEmail: patient.email, toName: patient.firstName || '', subject, text, html });
+          }
         }
       } catch (e) {
-        console.warn('SMS update notice skipped:', e.message);
+        console.warn('Update appointment email skipped:', e.message);
       }
 
       return updatedAppointment;

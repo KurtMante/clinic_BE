@@ -1,86 +1,66 @@
 const axios = require('axios');
-const twilio = require('twilio');
 
 const {
-  TWILIO_ACCOUNT_SID,
-  TWILIO_AUTH_TOKEN,
-  TWILIO_FROM_NUMBER,
   TELESIGN_CUSTOMER_ID,
   TELESIGN_API_KEY,
   TELESIGN_SENDER_ID,
   TELESIGN_MESSAGE_TYPE
 } = process.env;
 
-let client = null;
-if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN) {
-  client = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
-}
-
 function isConfigured() {
   return !!(TELESIGN_CUSTOMER_ID && TELESIGN_API_KEY);
 }
 
-async function sendSms(to, body) {
-  if (!client) {
-    console.warn('SMS skipped: Twilio credentials missing');
-    return;
-  }
-  if (!to) {
-    console.warn('SMS skipped: destination number missing');
-    return;
-  }
-  console.log('Sending SMS to', to, '=>', body);
-  try {
-    const resp = await client.messages.create({ from: TWILIO_FROM_NUMBER, to, body });
-    console.log('Twilio SID:', resp.sid);
-    return resp;
-  } catch (e) {
-    console.warn('SMS send failed:', e.message);
-  }
+function validateE164(num) {
+  // Must start with + and 8–15 digits total (E.164 max 15 digits)
+  return /^\+[1-9]\d{7,14}$/.test(num);
 }
 
-async function sendSmsTelesign(to, body) {
+async function sendSms(to, body) {
   if (!isConfigured()) {
-    console.warn('SMS skipped: Telesign credentials missing');
+    console.warn('Telesign not configured');
     return;
   }
   if (!to) {
-    console.warn('SMS skipped: destination number missing');
+    console.warn('Missing destination number');
+    return;
+  }
+  if (!validateE164(to)) {
+    console.warn('Invalid E.164 format:', to);
     return;
   }
 
-  // Build Basic auth header
   const auth = Buffer.from(`${TELESIGN_CUSTOMER_ID}:${TELESIGN_API_KEY}`).toString('base64');
+  const params = new URLSearchParams();
+  params.append('phone_number', to);
+  params.append('message', body);
+  params.append('message_type', TELESIGN_MESSAGE_TYPE || 'ARN');
+  if (TELESIGN_SENDER_ID) params.append('sender_id', TELESIGN_SENDER_ID);
 
-  const payload = {
-    phone_number: to,
-    message: body,
-    message_type: (TELESIGN_MESSAGE_TYPE || 'ARN')
-  };
-
-  if (TELESIGN_SENDER_ID) {
-    payload.sender_id = TELESIGN_SENDER_ID;
-  }
-
-  console.log(`Sending SMS via Telesign to ${to}`);
+  console.log('Sending SMS via Telesign to', to);
   try {
     const resp = await axios.post(
       'https://rest-api.telesign.com/v1/messaging',
-      payload,
+      params.toString(),
       {
         headers: {
           Authorization: `Basic ${auth}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/x-www-form-urlencoded'
         },
         timeout: 10000
       }
     );
-    console.log('Telesign status:', resp.status, resp.data?.reference_id || '');
+    console.log('Telesign OK ref:', resp.data?.reference_id);
     return resp.data;
   } catch (e) {
-    const detail = e.response?.data || e.message;
-    console.warn('Telesign send failed:', detail);
+    const data = e.response?.data;
+    if (data?.status?.code === 10033) {
+      console.warn('SMS skipped: destination not verified for trial (code 10033).');
+      return { skipped: true, reason: 'UNVERIFIED_TRIAL_NUMBER' };
+    }
+    console.warn('Telesign send failed:',
+      data ? JSON.stringify(data) : e.message);
   }
 }
 
-module.exports = { sendSms, sendSmsTelesign, isConfigured };
+module.exports = { sendSms, isConfigured };
