@@ -8,6 +8,7 @@ router.get('/', reminderController.getAllReminders);
 
 // POST create reminder
 router.post('/', reminderController.createReminder);
+router.put('/:reminderId/read', reminderController.markAsRead);
 
 // GET reminders by patient ID
 router.get('/patient/:patientId', reminderController.getRemindersByPatientId);

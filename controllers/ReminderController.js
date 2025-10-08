@@ -39,10 +39,10 @@ class ReminderController {
 
   async markAsRead(req, res) {
     try {
-      const reminder = await reminderService.markAsRead(req.params.reminderId);
-      res.status(200).json(reminder);
-    } catch (error) {
-      res.status(400).json({ error: error.message });
+      const updated = await reminderService.markAsRead(req.params.reminderId);
+      res.json(updated);
+    } catch (e) {
+      res.status(404).json({ error: e.message });
     }
   }
 
@@ -66,31 +66,10 @@ class ReminderController {
 
   async createReminder(req, res) {
     try {
-      const {
-        patientId,
-        appointmentId = null,
-        serviceName = null,
-        preferredDateTime = null,
-        message,
-        reminderType = 'Appointment' 
-      } = req.body;
-
-      if (!patientId || !message) {
-        return res.status(400).json({ error: 'patientId and message are required' });
-      }
-
-      const reminder = await reminderService.createReminder({
-        patientId,
-        appointmentId,
-        serviceName,
-        preferredDateTime,
-        message,
-        reminderType
-      });
-
+      const reminder = await reminderService.createReminder(req.body);
       res.status(201).json(reminder);
-    } catch (error) {
-      res.status(400).json({ error: error.message });
+    } catch (e) {
+      res.status(400).json({ error: e.message });
     }
   }
 }

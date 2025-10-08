@@ -4,6 +4,7 @@ const appointmentRepository = require('../repositories/AppointmentRepository');
 const medicalServiceRepository = require('../repositories/MedicalServiceRepository');
 const Reminder = require('../models/Reminder');
 const { pool } = require('../config/database');
+const { sendSms } = require('./SmsService');
 
 class ReminderService {
   async getAllReminders() {
@@ -127,39 +128,62 @@ class ReminderService {
     }
   }
 
-  async createReminder({ patientId, appointmentId = null, serviceName = null, preferredDateTime = null, message }) {
-    if (!patientId || !message) throw new Error('patientId and message are required');
-
-    let dt = null;
-    if (preferredDateTime) {
-      const d = new Date(preferredDateTime);
-      if (isNaN(d)) throw new Error('Invalid preferredDateTime');
-      dt = d.toISOString().slice(0, 19).replace('T', ' ');
+  async createReminder({ patientId, appointmentId, serviceName, preferredDateTime, message }) {
+    if (!patientId || !appointmentId || !serviceName || !preferredDateTime || !message) {
+      throw new Error('Missing required reminder fields');
     }
 
-    const [result] = await pool.execute(
-      `INSERT INTO Reminders (patientId, appointmentId, serviceName, preferredDateTime, message, isRead, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, FALSE, NOW(), NOW())`,
-      [patientId, appointmentId, serviceName, dt, message]
+    // Ensure patient exists & get phone
+    const [pRows] = await pool.execute(
+      'SELECT firstName, phone FROM patients WHERE patientId = ?',
+      [patientId]
     );
+    if (!pRows.length) throw new Error('Invalid patientId');
+    const patient = pRows[0];
 
-    const [rows] = await pool.execute('SELECT * FROM Reminders WHERE reminderId = ?', [result.insertId]);
-    return rows[0];
+    // Normalize datetime (expects 'YYYY-MM-DD HH:mm:ss' already; convert if needed)
+    let dt = preferredDateTime;
+    if (preferredDateTime.includes('T')) {
+      dt = new Date(preferredDateTime).toISOString().slice(0, 19).replace('T', ' ');
+    }
+
+    const reminder = await reminderRepository.save({
+      patientId,
+      appointmentId,
+      serviceName,
+      preferredDateTime: dt,
+      message,
+      isRead: 0
+    });
+
+    // Send SMS (fire-and-forget)
+    if (patient.phone) {
+      const smsBody = `Reminder: ${serviceName} on ${dt}. ${message}`;
+      sendSms(patient.phone, smsBody);
+      // Optional: mark smsSent
+      try {
+        await pool.execute('UPDATE reminders SET smsSent = 1 WHERE reminderId = ?', [reminder.reminderId]);
+        reminder.smsSent = 1;
+      } catch {}
+    }
+
+    return reminder;
   }
 
   async markAsRead(reminderId) {
-    try {
-      const reminder = await this.getReminderById(reminderId);
-      
-      if (reminder.isRead === 1) {
-        throw new Error('This reminder has already been marked as read');
-      }
+    const existing = await reminderRepository.findById(reminderId);
+    if (!existing) throw new Error('Reminder not found');
+    if (existing.isRead) return existing;
 
-      return await reminderRepository.update(reminderId, { isRead: true });
-    } catch (error) {
-      console.error('Service error marking reminder as read:', error);
-      throw error;
-    }
+    const updated = await reminderRepository.update(reminderId, { isRead: 1 });
+
+    // Optional SMS on read
+    // const [p] = await pool.execute('SELECT phone FROM patients WHERE patientId = ?', [updated.patientId]);
+    // if (p.length && p[0].phone) {
+    //   sendSms(p[0].phone, `You viewed your reminder: ${updated.serviceName}`);
+    // }
+
+    return updated;
   }
 
   async markAsUnread(reminderId) {

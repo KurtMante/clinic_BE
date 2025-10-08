@@ -1,33 +1,31 @@
 const express = require('express');
-const acceptedAppointmentController = require('../controllers/AcceptedAppointmentController');
+const controller = require('../controllers/AcceptedAppointmentController');
 
 const router = express.Router();
 
+// Accept appointment
+router.post('/accept/:appointmentId', controller.acceptAppointment);
+
+// Mark attendance
+router.put('/:acceptedAppointmentId/attend', controller.markAttended);
+router.put('/:acceptedAppointmentId/not-attend', controller.markNotAttended);
+
 // GET all accepted appointments
-router.get('/', acceptedAppointmentController.getAllAcceptedAppointments);
+router.get('/', controller.getAllAcceptedAppointments);
 
 // GET pending appointments (not attended)
-router.get('/pending', acceptedAppointmentController.getPendingAppointments);
+router.get('/pending', controller.getPendingAppointments);
 
 // GET attended appointments
-router.get('/attended', acceptedAppointmentController.getAttendedAppointments);
+router.get('/attended', controller.getAttendedAppointments);
 
 // GET accepted appointments by patient ID
-router.get('/patient/:patientId', acceptedAppointmentController.getAcceptedAppointmentsByPatientId);
-
-// POST accept an appointment (move from appointments to accepted_appointments)
-router.post('/accept/:appointmentId', acceptedAppointmentController.acceptAppointment);
-
-// PUT mark appointment as attended
-router.put('/:acceptedAppointmentId/attend', acceptedAppointmentController.markAsAttended);
-
-// PUT mark appointment as not attended
-router.put('/:acceptedAppointmentId/not-attend', acceptedAppointmentController.markAsNotAttended);
+router.get('/patient/:patientId', controller.getAcceptedAppointmentsByPatientId);
 
 // GET accepted appointment by ID
-router.get('/:acceptedAppointmentId', acceptedAppointmentController.getAcceptedAppointmentById);
+router.get('/:acceptedAppointmentId', controller.getAcceptedAppointmentById);
 
 // DELETE accepted appointment
-router.delete('/:acceptedAppointmentId', acceptedAppointmentController.deleteAcceptedAppointment);
+router.delete('/:acceptedAppointmentId', controller.deleteAcceptedAppointment);
 
 module.exports = router;

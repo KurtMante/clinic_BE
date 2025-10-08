@@ -76,60 +76,49 @@ class AcceptedAppointmentController {
   // POST /api/accepted-appointments/accept/:appointmentId
   async acceptAppointment(req, res) {
     try {
-      const appointmentId = req.params.appointmentId;
-      const acceptedAppointment = await acceptedAppointmentService.createAcceptedAppointment(appointmentId);
-      res.status(201).json(acceptedAppointment);
-    } catch (error) {
-      console.error('Controller error accepting appointment:', error);
-      res.status(400).json({ 
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
+      const accepted = await acceptedAppointmentService.acceptAppointment(
+        req.params.appointmentId
+      );
+      res.status(201).json(accepted);
+    } catch (e) {
+      res.status(400).json({ error: e.message });
     }
   }
 
   // PUT /api/accepted-appointments/:acceptedAppointmentId/attend
-  async markAsAttended(req, res) {
+  async markAttended(req, res) {
     try {
-      const acceptedAppointmentId = req.params.acceptedAppointmentId;
-      const updatedAppointment = await acceptedAppointmentService.markAsAttended(acceptedAppointmentId);
-      res.status(200).json(updatedAppointment);
-    } catch (error) {
-      console.error('Controller error marking as attended:', error);
-      res.status(400).json({ 
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
+      const updated = await acceptedAppointmentService.setAttendance(
+        req.params.acceptedAppointmentId,
+        true
+      );
+      res.json(updated);
+    } catch (e) {
+      res.status(400).json({ error: e.message });
     }
   }
 
   // PUT /api/accepted-appointments/:acceptedAppointmentId/not-attend
-  async markAsNotAttended(req, res) {
+  async markNotAttended(req, res) {
     try {
-      const acceptedAppointmentId = req.params.acceptedAppointmentId;
-      const updatedAppointment = await acceptedAppointmentService.markAsNotAttended(acceptedAppointmentId);
-      res.status(200).json(updatedAppointment);
-    } catch (error) {
-      console.error('Controller error marking as not attended:', error);
-      res.status(400).json({ 
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
+      const updated = await acceptedAppointmentService.setAttendance(
+        req.params.acceptedAppointmentId,
+        false
+      );
+      res.json(updated);
+    } catch (e) {
+      res.status(400).json({ error: e.message });
     }
   }
 
   // DELETE /api/accepted-appointments/:acceptedAppointmentId
   async deleteAcceptedAppointment(req, res) {
     try {
-      const acceptedAppointmentId = req.params.acceptedAppointmentId;
-      const result = await acceptedAppointmentService.deleteAcceptedAppointment(acceptedAppointmentId);
-      res.status(200).json(result);
-    } catch (error) {
-      console.error('Controller error deleting accepted appointment:', error);
-      res.status(404).json({ 
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
+      const id = req.params.acceptedAppointmentId;
+      const result = await acceptedAppointmentService.deleteAcceptedAppointment(id);
+      res.json(result);
+    } catch (e) {
+      res.status(404).json({ error: e.message });
     }
   }
 }

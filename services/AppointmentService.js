@@ -2,6 +2,7 @@ const appointmentRepository = require('../repositories/AppointmentRepository');
 const patientRepository = require('../repositories/PatientRepository');
 const medicalServiceRepository = require('../repositories/MedicalServiceRepository');
 const Appointment = require('../models/Appointment');
+const { sendSms } = require('./SmsService');
 
 class AppointmentService {
   async getAllAppointments() {
@@ -154,6 +155,20 @@ class AppointmentService {
         status: appointment.status
       });
 
+      // Fetch patient (adjust method name if different)
+      try {
+        const patient = await patientRepository.findById
+          ? await patientRepository.findById(savedAppointment.patientId)
+          : (await patientRepository.getPatientById(savedAppointment.patientId));
+
+        const phone = patient?.phone;
+        const dt = savedAppointment.preferredDateTime;
+        const msg = `Appointment booked (ID: ${savedAppointment.appointmentId}) on ${dt} for service ${savedAppointment.serviceId}.`;
+        sendSms(phone, msg).catch(e => console.warn('SMS send failed:', e.message));
+      } catch (e) {
+        console.warn('SMS skipped (patient lookup failed):', e.message);
+      }
+
       return savedAppointment;
     } catch (error) {
       console.error('Service error creating appointment:', error);
@@ -243,6 +258,23 @@ class AppointmentService {
       }
 
       const updatedAppointment = await appointmentRepository.update(appointmentId, appointmentData);
+
+      // Optional: notify if status or datetime changed
+      try {
+        if (appointmentData.status || appointmentData.preferredDateTime) {
+          const patient = await patientRepository.findById
+            ? await patientRepository.findById(updatedAppointment.patientId)
+            : (await patientRepository.getPatientById(updatedAppointment.patientId));
+          const phone = patient?.phone;
+          const msg = `Appointment ${appointmentId} updated: `
+            + (appointmentData.status ? `status=${appointmentData.status} ` : '')
+            + (appointmentData.preferredDateTime ? `date=${appointmentData.preferredDateTime}` : '');
+          sendSms(phone, msg.trim()).catch(e => console.warn('SMS send failed:', e.message));
+        }
+      } catch (e) {
+        console.warn('SMS update notice skipped:', e.message);
+      }
+
       return updatedAppointment;
     } catch (error) {
       console.error('Service error updating appointment:', error);

@@ -1,5 +1,8 @@
 const acceptedAppointmentRepository = require('../repositories/AcceptedAppointmentRepository');
 const appointmentRepository = require('../repositories/AppointmentRepository');
+const patientRepository = require('../repositories/PatientRepository');
+const medicalServiceRepository = require('../repositories/MedicalServiceRepository');
+const { sendSms } = require('./SmsService');
 const AcceptedAppointment = require('../models/AcceptedAppointment');
 const reminderService = require('./ReminderService');
 
@@ -143,6 +146,88 @@ class AcceptedAppointmentService {
       console.error('Service error deleting accepted appointment:', error);
       throw error;
     }
+  }
+
+  async acceptAppointment(appointmentId) {
+    // 1. Get original appointment
+    const appointment = await appointmentRepository.findById
+      ? await appointmentRepository.findById(appointmentId)
+      : await appointmentRepository.getAppointmentById(appointmentId);
+    if (!appointment) throw new Error('Appointment not found');
+    if (appointment.status && appointment.status.toLowerCase() === 'accepted') {
+      throw new Error('Appointment already accepted');
+    }
+
+    // 2. Get service details
+    let service = null;
+    if (appointment.serviceId) {
+      service = await medicalServiceRepository.findById
+        ? await medicalServiceRepository.findById(appointment.serviceId)
+        : null;
+    }
+
+    // 3. Create accepted appointment record
+    const accepted = await acceptedAppointmentRepository.save({
+      appointmentId: appointment.appointmentId,
+      patientId: appointment.patientId,
+      serviceId: appointment.serviceId,
+      preferredDateTime: appointment.preferredDateTime,
+      symptom: appointment.symptom,
+      isAttended: 0
+    });
+
+    // 4. Update original appointment status (if repository has a method; else run raw)
+    if (appointmentRepository.updateStatus) {
+      await appointmentRepository.updateStatus(appointmentId, 'accepted');
+    } else if (appointmentRepository.update) {
+      await appointmentRepository.update(appointmentId, { status: 'accepted' });
+    }
+
+    // 5. Fetch patient for phone
+    const patient = await patientRepository.findById
+      ? await patientRepository.findById(appointment.patientId)
+      : await patientRepository.getPatientById(appointment.patientId);
+
+    // 6. Send SMS (non-blocking)
+    if (patient && patient.phone) {
+      const dateStr = new Date(appointment.preferredDateTime)
+        .toISOString()
+        .replace('T', ' ')
+        .slice(0, 16);
+      const svcName = service?.serviceName || 'your service';
+      const msg = `Your appointment (${appointment.appointmentId}) for ${svcName} on ${dateStr} has been accepted.`;
+      sendSms(patient.phone, msg).catch(e =>
+        console.warn('Failed to send accept SMS:', e.message)
+      );
+    }
+
+    return accepted;
+  }
+
+  async setAttendance(acceptedAppointmentId, isAttended) {
+    const updated = await acceptedAppointmentRepository.updateAttendanceStatus(
+      acceptedAppointmentId,
+      isAttended ? 1 : 0
+    );
+
+    // Notify patient (optional)
+    try {
+      const patient = await patientRepository.findById
+        ? await patientRepository.findById(updated.patientId)
+        : await patientRepository.getPatientById(updated.patientId);
+      if (patient?.phone) {
+        const msg = isAttended
+          ? `Thank you for attending appointment ${updated.appointmentId}.`
+          : `You were marked absent for appointment ${updated.appointmentId}. Contact us to reschedule.`;
+        sendSms(patient.phone, msg).catch(e =>
+          console.warn('Failed to send attendance SMS:', e.message)
+        );
+      }
+    } catch (e) {
+      console.warn('Attendance SMS skipped:', e.message);
+    }
+
+    return updated;
   }
 }
 
