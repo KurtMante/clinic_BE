@@ -11,7 +11,8 @@ class AdminController {
     }
   }
 
-  // GET /api/admins/:adminId
+
+  //get/ api/admins/:adminId
   async getAdminById(req, res) {
     try {
       const admin = await adminService.getAdminById(req.params.adminId);

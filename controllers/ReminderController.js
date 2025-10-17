@@ -19,6 +19,7 @@ class ReminderController {
     }
   }
 
+  // GET /api/reminders/patient/:patientId
   async getRemindersByPatientId(req, res) {
     try {
       const { patientId } = req.params;

@@ -15,7 +15,8 @@ class AcceptedAppointmentController {
     }
   }
 
-  // GET /api/accepted-appointments/:acceptedAppointmentId
+
+  //get/ api/accepted-appointments/:acceptedAppointmentId
   async getAcceptedAppointmentById(req, res) {
     try {
       const acceptedAppointmentId = req.params.acceptedAppointmentId;
