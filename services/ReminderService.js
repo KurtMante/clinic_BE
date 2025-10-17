@@ -152,7 +152,7 @@ class ReminderService {
         isRead: 0
       });
 
-      // sends email to patient if email exists
+      // sends email to patient if email exists           
       if (patient.email) {
         const subjectParts = ['Reminder'];
         if (serviceName) subjectParts.push(serviceName);
