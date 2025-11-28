@@ -10,7 +10,16 @@ let transporter = null;
 if (GMAIL_USER && GMAIL_APP_PASSWORD) {
   transporter = nodemailer.createTransport({
     service: 'gmail',
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD }
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: GMAIL_USER,
+      pass: GMAIL_APP_PASSWORD,
+    },
+    tls: {
+      rejectUnauthorized: false, // dev-only: bypass self-signed cert errors
+    },
   });
 }
 
