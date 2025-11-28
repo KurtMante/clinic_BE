@@ -12,7 +12,11 @@ class ReminderController {
 
   async getReminderById(req, res) {
     try {
-      const reminder = await reminderService.getReminderById(req.params.reminderId);
+      const id = Number(req.params.reminderId);
+      if (!Number.isInteger(id) || id <= 0) {
+        return res.status(400).json({ error: 'Invalid reminderId' });
+      }
+      const reminder = await reminderService.getReminderById(id);
       res.json(reminder);
     } catch (e) {
       res.status(404).json({ error: e.message });
