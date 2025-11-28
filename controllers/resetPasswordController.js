@@ -12,7 +12,7 @@ exports.sendResetLink = async (req, res) => {
     return res.json({ message: 'If the email exists, a reset link was sent.' });
   }
 
-  const resetLink = `http://localhost:3001/reset?email=${encodeURIComponent(email)}`;
+  const resetLink = `https://clinic-fe-z9mz.vercel.app/reset?email=${encodeURIComponent(email)}`;
   await sendEmail(email, 'Reset your password', `Click here to reset: ${resetLink}`);
 
   res.json({ message: 'If the email exists, a reset link was sent.' });
