@@ -11,6 +11,7 @@ const feedbackRepository = require('./repositories/FeedbackRepository');
 const staffRepository = require('./repositories/StaffRepository');
 const reminderRepository = require('./repositories/ReminderRepository');
 const adminRepository = require('./repositories/AdminRepository');
+const scheduleRepository = require('./repositories/ScheduleRepository');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,6 +40,7 @@ const staffRoutes = require('./routes/staffRoutes');
 const reminderRoutes = require('./routes/reminderRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const resetPasswordRoutes = require('./routes/resetPasswordRoutes');
+const scheduleRoutes = require('./routes/scheduleRoutes');
 
 app.use('/api/patients', patientRoutes);
 app.use('/api/medical-services', medicalServiceRoutes);
@@ -49,6 +51,7 @@ app.use('/api/staff', staffRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/admins', adminRoutes);
 app.use('/api/patients', resetPasswordRoutes);
+app.use('/api/schedule', scheduleRoutes);
 
 
 // Health check route
@@ -71,6 +74,7 @@ async function startServer() {
     await staffRepository.createTable();
     await reminderRepository.createTable();
     await adminRepository.createTable();
+    await scheduleRepository.createTable();
     
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
