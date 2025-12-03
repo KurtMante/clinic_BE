@@ -1,6 +1,43 @@
 const appointmentService = require('../services/AppointmentService');
 const scheduleRepository = require('../repositories/ScheduleRepository');
 
+async function assertDoctorAvailable(preferredDateTime, isWalkIn = false) {
+  // Skip availability check for walk-in patients during business hours
+  if (isWalkIn) {
+    return; // Allow walk-ins anytime (staff is registering them in person)
+  }
+
+  const d = new Date(preferredDateTime);
+  if (isNaN(d)) throw new Error('Invalid preferredDateTime');
+
+  // JS getDay(): 0=Sun ... 6=Sat; schedule uses 0=Mon so remap
+  const jsWeekday = d.getDay();
+  const weekday = (jsWeekday + 6) % 7; // Sun(0)->6, Mon(1)->0 ... Sat(6)->5
+
+  const sched = await scheduleRepository.findByWeekday(weekday);
+  if (!sched) return; // No schedule restriction
+
+  const status = (sched.status || '').toUpperCase();
+  if (['UNAVAILABLE', 'DAY_OFF'].includes(status)) {
+    throw new Error('Doctor not available on selected day.');
+  }
+
+  // Handle both startTime/endTime (class) or start_time/end_time (raw row)
+  const start = sched.startTime || sched.start_time;
+  const end = sched.endTime || sched.end_time;
+
+  if (['AVAILABLE', 'HALF_DAY'].includes(status) && start && end) {
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const current = `${hh}:${mm}`;
+    const startHHMM = start.slice(0, 5);
+    const endHHMM = end.slice(0, 5);
+    if (current < startHHMM || current > endHHMM) {
+      throw new Error(`Time outside available window (${startHHMM} - ${endHHMM}).`);
+    }
+  }
+}
+
 class AppointmentController {
   // GET /api/appointments
   async getAllAppointments(req, res) {
@@ -49,7 +86,22 @@ class AppointmentController {
   // POST /api/appointments
   async createAppointment(req, res) {
     try {
-      await assertDoctorAvailable(req.body.preferredDateTime);
+      const { patientId, serviceId, preferredDateTime, symptom, status, isWalkIn } = req.body;
+
+      // Validate required fields
+      if (!patientId) {
+        return res.status(400).json({ error: 'Patient ID is required' });
+      }
+      if (!serviceId) {
+        return res.status(400).json({ error: 'Service ID is required' });
+      }
+      if (!preferredDateTime) {
+        return res.status(400).json({ error: 'Preferred date/time is required' });
+      }
+
+      // Check doctor availability (skip for walk-ins)
+      await assertDoctorAvailable(preferredDateTime, isWalkIn);
+
       console.log('=== APPOINTMENT CONTROLLER CREATE DEBUG ===');
       console.log('Request body:', req.body);
       console.log('============================================');
@@ -61,7 +113,14 @@ class AppointmentController {
         });
       }
 
-      const appointment = await appointmentService.createAppointment(req.body);
+      const appointment = await appointmentService.createAppointment({
+        patientId,
+        serviceId,
+        preferredDateTime,
+        symptom,
+        status,
+        isWalkIn  // PASS THIS
+      });
       res.status(201).json(appointment);
     } catch (error) {
       console.error('Controller error creating appointment:', error);
@@ -102,32 +161,6 @@ class AppointmentController {
         error: error.message,
         timestamp: new Date().toISOString()
       });
-    }
-  }
-}
-
-async function assertDoctorAvailable(preferredDateTime) {
-  const d = new Date(preferredDateTime);
-  if (isNaN(d)) throw new Error('Invalid preferredDateTime');
-  // JS getDay(): 0=Sunday .. 6=Saturday; your schedule uses 0=Monday so remap
-  const jsWeekday = d.getDay(); // 0 Sun
-  const weekday = (jsWeekday + 6) % 7; // converts: Sun(0)->6, Mon(1)->0 ... Sat(6)->5
-  const sched = await scheduleRepository.findByWeekday(weekday);
-  if (!sched) return;
-
-  const status = (sched.status || '').toUpperCase();
-  if (['UNAVAILABLE','DAY_OFF'].includes(status)) {
-    throw new Error('Doctor not available on selected day.');
-  }
-
-  if (['AVAILABLE','HALF_DAY'].includes(status) && sched.startTime && sched.endTime) {
-    const hh = String(d.getHours()).padStart(2,'0');
-    const mm = String(d.getMinutes()).padStart(2,'0');
-    const current = `${hh}:${mm}`;
-    const start = sched.startTime.slice(0,5); // HH:MM
-    const end = sched.endTime.slice(0,5);     // HH:MM
-    if (current < start || current > end) {
-      throw new Error(`Time outside available window (${start} - ${end}).`);
     }
   }
 }

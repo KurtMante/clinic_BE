@@ -2,7 +2,7 @@ const appointmentRepository = require('../repositories/AppointmentRepository');
 const patientRepository = require('../repositories/PatientRepository');
 const medicalServiceRepository = require('../repositories/MedicalServiceRepository');
 const Appointment = require('../models/Appointment');
-const { sendEmail } = require('./EmailService'); // email only now
+const { sendEmail } = require('./EmailService');
 
 class AppointmentService {
   async getAllAppointments() {
@@ -29,12 +29,10 @@ class AppointmentService {
 
   async getAppointmentsByPatientId(patientId) {
     try {
-      // Verify patient exists
       const patient = await patientRepository.findById(patientId);
       if (!patient) {
         throw new Error(`Patient with ID ${patientId} not found`);
       }
-      
       return await appointmentRepository.findByPatientId(patientId);
     } catch (error) {
       console.error('Service error getting appointments by patient ID:', error);
@@ -44,69 +42,48 @@ class AppointmentService {
 
   async createAppointment(appointmentData) {
     try {
-      console.log('Appointment service received data:', appointmentData);
-      
-      // Basic validation
-      if (!appointmentData) {
-        throw new Error('Appointment data is required');
-      }
-      
-      if (!appointmentData.patientId) {
-        throw new Error('Patient ID is required');
-      }
-      
-      if (!appointmentData.serviceId) {
-        throw new Error('Service ID is required');
-      }
-      
-      if (!appointmentData.preferredDateTime) {
-        throw new Error('Preferred date and time is required');
-      }
-      
-      if (!appointmentData.symptom || appointmentData.symptom.trim() === '') {
-        throw new Error('Symptom is required');
-      }
+      const { patientId, serviceId, preferredDateTime, symptom, status, isWalkIn } = appointmentData;
 
-      // Validate status if provided
-      if (appointmentData.status) {
-        const validStatuses = ['Pending', 'Accepted', 'Declined'];
-        if (!validStatuses.includes(appointmentData.status)) {
-          throw new Error('Status must be one of: Pending, Accepted, or Declined');
+      // Validate required fields
+      if (!patientId) throw new Error('Patient ID is required');
+      if (!serviceId) throw new Error('Service ID is required');
+      if (!preferredDateTime) throw new Error('Preferred date/time is required');
+
+      const appointmentTime = new Date(preferredDateTime);
+      const currentTime = new Date();
+
+      // Check if patient is a walk-in (by role or flag)
+      const patient = await patientRepository.findById(patientId);
+      if (!patient) {
+        throw new Error(`Patient with ID ${patientId} not found`);
+      }
+      const isWalkInPatient = isWalkIn || patient.role === 'Walkin';
+
+      // Skip past/future validation for walk-in patients
+      if (!isWalkInPatient) {
+        console.log('Current time:', currentTime.toISOString());
+        console.log('Appointment time:', appointmentTime.toISOString());
+        console.log('Is in past?', appointmentTime < currentTime);
+
+        const bufferMs = 60 * 1000; // 1 minute buffer
+        if (appointmentTime.getTime() < currentTime.getTime() - bufferMs) {
+          throw new Error(
+            `Appointment cannot be scheduled in the past or too soon. ` +
+            `Current time: ${currentTime.toLocaleString()}, ` +
+            `Requested time: ${appointmentTime.toLocaleString()}`
+          );
         }
       }
 
-      // Validate date and time format
-      const appointmentDate = new Date(appointmentData.preferredDateTime);
-      if (isNaN(appointmentDate.getTime())) {
-        throw new Error('Invalid date and time format. Use YYYY-MM-DD HH:MM:SS');
-      }
-
-      // Check if appointment is in the past (with a 5-minute buffer for processing)
-      const now = new Date();
-      const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
-      
-      console.log('Current time:', now.toISOString());
-      console.log('Appointment time:', appointmentDate.toISOString());
-      console.log('Is in past?', appointmentDate <= fiveMinutesFromNow);
-      
-      if (appointmentDate <= fiveMinutesFromNow) {
-        throw new Error(`Appointment cannot be scheduled in the past or too soon. Current time: ${now.toLocaleString()}, Requested time: ${appointmentDate.toLocaleString()}`);
-      }
-
-      // Validate foreign key references
-      const patient = await patientRepository.findById(appointmentData.patientId);
-      if (!patient) {
-        throw new Error(`Patient with ID ${appointmentData.patientId} not found`);
-      }
-
-      const service = await medicalServiceRepository.findById(appointmentData.serviceId);
+      // Validate service exists
+      const service = await medicalServiceRepository.findById(serviceId);
       if (!service) {
-        throw new Error(`Medical service with ID ${appointmentData.serviceId} not found`);
+        throw new Error(`Medical service with ID ${serviceId} not found`);
       }
 
       // Check for global time slot conflicts (any patient)
       const timeSlotConflicts = await appointmentRepository.findAppointmentsByTimeSlot(
-        appointmentData.preferredDateTime
+        preferredDateTime
       );
 
       if (timeSlotConflicts.length > 0) {
@@ -117,10 +94,10 @@ class AppointmentService {
         );
       }
 
-      // Check for patient-specific conflicts (redundant but keeping for clarity)
+      // Check for patient-specific conflicts
       const patientConflicts = await appointmentRepository.findConflictingAppointments(
-        appointmentData.patientId, 
-        appointmentData.preferredDateTime
+        patientId,
+        preferredDateTime
       );
 
       if (patientConflicts.length > 0) {
@@ -131,14 +108,14 @@ class AppointmentService {
         );
       }
 
-      // Create and validate model (status defaults to 'Pending' if not provided)
+      // Create and validate model
       const appointment = new Appointment(
         null,
-        appointmentData.patientId,
-        appointmentData.serviceId,
-        appointmentData.preferredDateTime,
-        appointmentData.symptom.trim(),
-        appointmentData.status || 'Pending'
+        patientId,
+        serviceId,
+        preferredDateTime,
+        symptom.trim(),
+        status || 'Pending'
       );
 
       const validationErrors = appointment.validate();
@@ -148,19 +125,18 @@ class AppointmentService {
 
       // Save to database
       const savedAppointment = await appointmentRepository.save({
-        patientId: appointmentData.patientId,
-        serviceId: appointmentData.serviceId,
-        preferredDateTime: appointmentData.preferredDateTime,
-        symptom: appointmentData.symptom.trim(),
-        status: appointmentData.status || 'Pending'
+        patientId,
+        serviceId,
+        preferredDateTime,
+        symptom: symptom.trim(),
+        status: status || 'Pending'
       });
 
-      // Fetch patient for email notification
+      // Send email notification
       try {
-        const patient = await patientRepository.findById(savedAppointment.patientId);
         if (patient?.email) {
           const subject = `Appointment Created (ID: ${savedAppointment.appointmentId})`;
-            const text = `Your appointment is pending on ${savedAppointment.preferredDateTime}.`;
+          const text = `Your appointment is pending on ${savedAppointment.preferredDateTime}.`;
           const html = `
             <h3>Appointment Created</h3>
             <p>Hi ${patient.firstName || 'Patient'},</p>
@@ -184,7 +160,6 @@ class AppointmentService {
 
   async updateAppointment(appointmentId, appointmentData) {
     try {
-      // Check if appointment exists
       const existingAppointment = await this.getAppointmentById(appointmentId);
 
       // Validate status if being updated
@@ -195,7 +170,7 @@ class AppointmentService {
         }
       }
 
-      // Validate foreign key references if they're being updated
+      // Validate foreign key references if being updated
       if (appointmentData.patientId !== undefined) {
         const patient = await patientRepository.findById(appointmentData.patientId);
         if (!patient) {
@@ -214,21 +189,18 @@ class AppointmentService {
       if (appointmentData.preferredDateTime !== undefined) {
         const newDateTime = appointmentData.preferredDateTime;
 
-        // Validate date and time format
         const appointmentDate = new Date(newDateTime);
         if (isNaN(appointmentDate.getTime())) {
           throw new Error('Invalid date and time format. Use YYYY-MM-DD HH:MM:SS');
         }
 
-        // Check if appointment is in the past (with a 5-minute buffer)
         const now = new Date();
         const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
-        
+
         if (appointmentDate <= fiveMinutesFromNow) {
           throw new Error(`Appointment cannot be scheduled in the past or too soon. Current time: ${now.toLocaleString()}, Requested time: ${appointmentDate.toLocaleString()}`);
         }
 
-        // Check for global time slot conflicts (excluding current appointment)
         const timeSlotConflicts = await appointmentRepository.findAppointmentsByTimeSlot(
           newDateTime,
           appointmentId
@@ -243,13 +215,13 @@ class AppointmentService {
         }
       }
 
-      // Check for patient-specific conflicts if patient or time is being updated
+      // Check for patient-specific conflicts
       if (appointmentData.preferredDateTime !== undefined || appointmentData.patientId !== undefined) {
         const newDateTime = appointmentData.preferredDateTime || existingAppointment.preferredDateTime;
         const newPatientId = appointmentData.patientId || existingAppointment.patientId;
 
         const patientConflicts = await appointmentRepository.findConflictingAppointments(
-          newPatientId, 
+          newPatientId,
           newDateTime,
           appointmentId
         );
@@ -274,8 +246,7 @@ class AppointmentService {
             const changes = [];
             if (appointmentData.status) changes.push(`Status: ${appointmentData.status}`);
             if (appointmentData.preferredDateTime) changes.push(`Date/Time: ${appointmentData.preferredDateTime}`);
-            const changeLine = changes.join(' | ');
-            const text = `Your appointment ${appointmentId} was updated. ${changeLine}`;
+            const text = `Your appointment ${appointmentId} was updated. ${changes.join(' | ')}`;
             const html = `
               <h3>Appointment Updated</h3>
               <p>Hi ${patient.firstName || 'Patient'},</p>
@@ -298,14 +269,13 @@ class AppointmentService {
 
   async deleteAppointment(appointmentId) {
     try {
-      // Check if appointment exists
       await this.getAppointmentById(appointmentId);
 
       const success = await appointmentRepository.deleteById(appointmentId);
       if (!success) {
         throw new Error('Failed to delete appointment');
       }
-      
+
       return { message: 'Appointment deleted successfully' };
     } catch (error) {
       console.error('Service error deleting appointment:', error);
