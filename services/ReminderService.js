@@ -5,10 +5,10 @@ const medicalServiceRepository = require('../repositories/MedicalServiceReposito
 const Reminder = require('../models/Reminder');
 const { sendEmail } = require('./EmailService');
 
-// Helper to convert MySQL datetime string → JS Date in Manila time
+// Helper to convert MySQL datetime string (UTC) → JS Date in Manila time
 function toManilaDate(mysqlDatetime) {
-  const [datePart, timePart] = mysqlDatetime.split(' ');
-  return new Date(`${datePart}T${timePart}+08:00`);
+  // Assumes mysqlDatetime is in UTC, e.g., "2025-12-10 03:00:00"
+  return new Date(mysqlDatetime.replace(' ', 'T') + 'Z');
 }
 
 class ReminderService {
