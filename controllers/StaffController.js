@@ -43,11 +43,14 @@ class StaffController {
 
   // DELETE /api/staff/:staffId
   async deleteStaff(req, res) {
+    const { staffId } = req.params;
+    const deletedByStaffId = req.body.deletedByStaffId; // Pass from frontend
+
     try {
-      const result = await staffService.deleteStaff(req.params.staffId);
-      res.json(result);
+      await staffService.softDeleteStaff(staffId, deletedByStaffId);
+      res.json({ message: 'Staff soft deleted successfully' });
     } catch (error) {
-      res.status(404).json({ error: error.message });
+      res.status(500).json({ error: 'Failed to soft delete staff' });
     }
   }
 

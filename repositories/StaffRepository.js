@@ -83,6 +83,13 @@ class StaffRepository {
     return result.affectedRows > 0;
   }
 
+  async softDelete(staffId, deletedByStaffId) {
+    await pool.query(
+      `UPDATE staff SET isDeleted = 1, deletedByStaffId = ?, deletedAt = NOW() WHERE staffId = ?`,
+      [deletedByStaffId, staffId]
+    );
+  }
+
   async createTable() {
     try {
       // First create the table with basic structure

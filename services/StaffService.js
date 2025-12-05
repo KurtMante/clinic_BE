@@ -125,6 +125,11 @@ class StaffService {
     return updatedStaff;
   }
 
+  async softDeleteStaff(staffId, deletedByStaffId) {
+  // Use your staff repository or db connection here
+  await staffRepository.softDelete(staffId, deletedByStaffId);
+}
+
   async deleteStaff(staffId) {
     const success = await staffRepository.deleteById(staffId);
     if (!success) {
@@ -133,5 +138,7 @@ class StaffService {
     return { message: 'Staff deleted successfully' };
   }
 }
+
+
 
 module.exports = new StaffService();
