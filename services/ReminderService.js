@@ -52,7 +52,7 @@ class ReminderService {
     }
   }
 
-  // FIXED VERSION: NO UTC CONVERSION
+  // FIXED VERSION: NO UTC CONVERSION1
   async createReminderForAcceptedAppointment(appointmentId) {
     try {
       const appointment = await appointmentRepository.findById(appointmentId);
