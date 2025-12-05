@@ -52,6 +52,11 @@ class AppointmentService {
       const appointmentTime = new Date(preferredDateTime);
       const currentTime = new Date();
 
+      const closingHour = 17; // 5 PM in 24-hour format
+      if (appointmentTime.getHours() >= closingHour) {
+        throw new Error('Clinic closes at 5:00 PM. Please select an earlier time.');
+      }
+
       // Check if patient is a walk-in (by role or flag)
       const patient = await patientRepository.findById(patientId);
       if (!patient) {
@@ -190,6 +195,11 @@ class AppointmentService {
         const newDateTime = appointmentData.preferredDateTime;
 
         const appointmentDate = new Date(newDateTime);
+        const closingHour = 17; // 5 PM in 24-hour format
+        if (appointmentDate.getHours() >= closingHour) {
+          throw new Error('Clinic closes at 5:00 PM. Please select an earlier time.');
+        }
+
         if (isNaN(appointmentDate.getTime())) {
           throw new Error('Invalid date and time format. Use YYYY-MM-DD HH:MM:SS');
         }
