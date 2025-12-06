@@ -78,7 +78,8 @@ class FeedbackService {
         feedbackData.patientId,
         parseInt(feedbackData.rating),
         feedbackData.comment.trim(),
-        feedbackData.isAnonymous || false
+        feedbackData.isAnonymous || false,
+        feedbackData.serviceId || null // <-- Add this line
       );
 
       const validationErrors = feedback.validate();
@@ -90,7 +91,8 @@ class FeedbackService {
         patientId: feedback.patientId,
         rating: feedback.rating,
         comment: feedback.comment,
-        isAnonymous: feedback.isAnonymous
+        isAnonymous: feedback.isAnonymous,
+        serviceId: feedback.serviceId // <-- Add this line
       });
     } catch (error) {
       console.error('Service error creating feedback:', error);

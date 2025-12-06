@@ -1,10 +1,11 @@
 class Feedback {
-  constructor(feedbackId, patientId, rating, comment, isAnonymous = false) {
+  constructor(feedbackId, patientId, rating, comment, isAnonymous = false, serviceId = null) {
     this.feedbackId = feedbackId;
     this.patientId = patientId;
-    this.rating = rating; // 1-5 star rating
+    this.rating = rating;
     this.comment = comment;
-    this.isAnonymous = isAnonymous; // boolean: 0 = not anonymous, 1 = anonymous
+    this.isAnonymous = isAnonymous;
+    this.serviceId = serviceId; // <-- Add this line
     this.createdAt = new Date();
     this.updatedAt = new Date();
   }

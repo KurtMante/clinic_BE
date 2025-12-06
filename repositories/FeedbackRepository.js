@@ -3,14 +3,12 @@ const { pool } = require('../config/database');
 class FeedbackRepository {
   async findAll() {
     try {
-      const query = `
-        SELECT f.*, 
-               p.firstName, p.lastName, p.email
+      const [rows] = await pool.query(`
+        SELECT f.*, s.serviceName
         FROM feedback f
-        LEFT JOIN patients p ON f.patientId = p.patientId
-        ORDER BY f.feedbackId DESC
-      `;
-      const [rows] = await pool.execute(query);
+        LEFT JOIN medical_services s ON f.serviceId = s.serviceId
+        ORDER BY f.createdAt DESC
+      `);
       return rows;
     } catch (error) {
       console.error('Error finding all feedback:', error);
@@ -72,15 +70,16 @@ class FeedbackRepository {
   async save(feedbackData) {
     try {
       const query = `
-        INSERT INTO feedback (patientId, rating, comment, isAnonymous, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, NOW(), NOW())
+        INSERT INTO feedback (patientId, rating, comment, isAnonymous, serviceId, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, NOW(), NOW())
       `;
       
       const values = [
         feedbackData.patientId || null,
         feedbackData.rating || null,
         feedbackData.comment || null,
-        feedbackData.isAnonymous ? 1 : 0
+        feedbackData.isAnonymous ? 1 : 0,
+        feedbackData.serviceId || null
       ];
       
       const [result] = await pool.execute(query, values);
@@ -114,6 +113,11 @@ class FeedbackRepository {
       if (feedbackData.isAnonymous !== undefined) {
         fields.push('isAnonymous = ?');
         values.push(feedbackData.isAnonymous ? 1 : 0);
+      }
+      
+      if (feedbackData.serviceId !== undefined) {
+        fields.push('serviceId = ?');
+        values.push(feedbackData.serviceId);
       }
       
       if (fields.length === 0) return null;
@@ -150,9 +154,11 @@ class FeedbackRepository {
           rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
           comment TEXT NOT NULL,
           isAnonymous BOOLEAN DEFAULT FALSE NOT NULL,
+          serviceId INT,
           createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          FOREIGN KEY (patientId) REFERENCES patients(patientId) ON DELETE CASCADE
+          FOREIGN KEY (patientId) REFERENCES patients(patientId) ON DELETE CASCADE,
+          FOREIGN KEY (serviceId) REFERENCES services(serviceId) ON DELETE SET NULL
         )
       `;
       await pool.execute(query);
