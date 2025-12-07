@@ -1,11 +1,11 @@
 const mysql = require('mysql2/promise');
 
-const dbConfig = {
+const baseConfig = {
   host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 3306,
+  port: Number(process.env.DB_PORT) || 3306,
   user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '123456',
-  database: 'wahing', // Changed from 'clinic' to 'wahing'
+  password: process.env.DB_PASSWORD || '12345678',
+  database: process.env.DB_NAME || 'wahing',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
@@ -13,29 +13,21 @@ const dbConfig = {
 
 // Create database if it doesn't exist
 async function createDatabase() {
-  const tempConfig = { ...dbConfig };
+  const tempConfig = { ...baseConfig };
   delete tempConfig.database; // Connect without specifying database
   
   try {
     const tempConnection = await mysql.createConnection(tempConfig);
-    await tempConnection.execute(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`);
+    await tempConnection.execute(`CREATE DATABASE IF NOT EXISTS ${baseConfig.database}`);
     await tempConnection.end();
-    console.log(`Database '${dbConfig.database}' created/verified`);
+    console.log(`Database '${baseConfig.database}' created/verified`);
   } catch (error) {
     console.error('Database creation failed:', error.message);
     throw error;
   }
 }
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '123456',
-  database: process.env.DB_NAME || 'wahing', // Use environment variable with 'wahing' as fallback
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
+const pool = mysql.createPool(baseConfig);
 
 // Test connection
 async function testConnection() {
