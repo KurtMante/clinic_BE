@@ -83,7 +83,7 @@ class AcceptedAppointmentService {
     });
   }
 
-  async createAcceptedAppointment(appointmentId) {
+  async createAcceptedAppointment(appointmentId, isAttendedParam = null) {
     try {
       // Get the original appointment
       const originalAppointment = await appointmentRepository.findById(appointmentId);
@@ -97,6 +97,15 @@ class AcceptedAppointmentService {
         throw new Error('This appointment has already been accepted');
       }
 
+      // Determine if walk-in
+      const patient = await patientRepository.findById(originalAppointment.patientId);
+      let isAttended = 0;
+      if (isAttendedParam !== null) {
+        isAttended = isAttendedParam ? 1 : 0;
+      } else if (patient && patient.role === 'Walkin') {
+        isAttended = 1;
+      }
+
       // Create accepted appointment
       const acceptedAppointmentData = {
         appointmentId: originalAppointment.appointmentId,
@@ -104,7 +113,7 @@ class AcceptedAppointmentService {
         serviceId: originalAppointment.serviceId,
         preferredDateTime: originalAppointment.preferredDateTime,
         symptom: originalAppointment.symptom,
-        isAttended: 0
+        isAttended
       };
 
       // Update original appointment status to 'Accepted'

@@ -28,4 +28,7 @@ router.get('/:acceptedAppointmentId', controller.getAcceptedAppointmentById);
 // DELETE accepted appointment
 router.delete('/:acceptedAppointmentId', controller.deleteAcceptedAppointment);
 
+// ADD THIS LINE for POST /api/accepted-appointments
+router.post('/', controller.createAcceptedAppointment);
+
 module.exports = router;

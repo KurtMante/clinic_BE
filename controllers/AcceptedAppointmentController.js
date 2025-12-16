@@ -86,6 +86,17 @@ class AcceptedAppointmentController {
     }
   }
 
+  // POST /api/accepted-appointments
+  async createAcceptedAppointment(req, res) {
+    try {
+      const { appointmentId, isAttended } = req.body;
+      const acceptedAppointment = await acceptedAppointmentService.createAcceptedAppointment(appointmentId, isAttended);
+      res.status(201).json(acceptedAppointment);
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+
   // PUT /api/accepted-appointments/:acceptedAppointmentId/attend
   async markAttended(req, res) {
     try {
