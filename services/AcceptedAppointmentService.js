@@ -57,31 +57,7 @@ class AcceptedAppointmentService {
     }
   }
 
-  // Helper to safely send acceptance email
-  async _sendAcceptanceEmail(appointment, service, patient) {
-    if (!patient?.email) return;
-    const dateStr = new Date(appointment.preferredDateTime)
-      .toISOString()
-      .replace('T', ' ')
-      .slice(0, 16);
-    const svcName = service?.serviceName || 'the requested service';
-    const subject = `Appointment Accepted (#${appointment.appointmentId})`;
-    const text = `Your appointment for ${svcName} on ${dateStr} has been accepted.`;
-    const html = `
-      <h3>Appointment Accepted</h3>
-      <p>Dear ${patient.firstName || 'Patient'},</p>
-      <p>Your appointment (<strong>${appointment.appointmentId}</strong>) for <strong>${svcName}</strong> on <strong>${dateStr}</strong> has been accepted.</p>
-      <p>Symptom/Reason: ${appointment.symptom || 'N/A'}</p>
-      <p>Thank you.</p>
-    `;
-    sendEmail({
-      toEmail: patient.email,
-      toName: patient.firstName || '',
-      subject,
-      text,
-      html
-    });
-  }
+ 
 
   async createAcceptedAppointment(appointmentId, isAttendedParam = null) {
     try {
